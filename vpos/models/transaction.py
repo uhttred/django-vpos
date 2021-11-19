@@ -1,19 +1,44 @@
 import uuid
+from typing import Union
 
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
+from vpos.configs import conf
 from vpos.validators import PhoneValidator
 from vpos.api import VposAPI
-
-
-class Manager(models.Manager):
-    pass
 
 
 class TransactionType(models.TextChoices):
     PAYMENT = 'payment', _('Payment')
     REFUND = 'refund', ('Refund')
+
+
+class Manager(models.Manager):
+    
+    def create_refund(self, parent):
+        """Creates a new Refund Transaction"""
+        transaction = self.model(
+            parent=parent,
+            type=TransactionType.REFUND,
+            mobile=parent.mobile,
+            amount=parent.amount)
+        if conf.MODE == 'production':
+            transaction.full_clean()
+        transaction.save()
+        return transaction
+    
+    def create_payment(self, mobile: str, amount: str):
+        """Creates a new Refund Transaction"""
+        transaction = self.model(
+            type=TransactionType.PAYMENT,
+            mobile=mobile,
+            amount=amount,
+            parent=None)
+        if conf.MODE == 'production':
+            transaction.full_clean()
+        transaction.save()
+        return transaction
 
 
 class Transaction(models.Model):
@@ -43,8 +68,12 @@ class Transaction(models.Model):
         on_delete=models.CASCADE,
         verbose_name=(_('parent transaction')),
         related_name='refund',
+        blank=True,
         null=True,
         default=None)
+    
+    created_at = models.DateTimeField(_('created at'), auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(_('updated at'), auto_now=True)
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
@@ -52,9 +81,9 @@ class Transaction(models.Model):
             idempotency_key=self.idempotency_key)
 
     @property
-    def is_paid(self) -> bool:
-        """Paid Status"""
-        pass
+    def payment(self) -> Union[dict, None]:
+        """Transaction Data from vPOS"""
+        return self.data.get('transaction')
     
     @property
     def idempotency_key(self) -> str:
@@ -64,6 +93,21 @@ class Transaction(models.Model):
     def location(self) -> str:
         """location string provided by vPOS api header"""
         return self.data.get('location', '')
+    
+    def check_payment(self, wait: bool = False) -> Union[dict, None]:
+        """
+        Check transaction status from vPOS API,
+        return transaction data if transaction accepted/rejected
+        else (if waiting) returns None
+        """
+        if not self.payment:
+            if (transaction := self.api.check(self.key, wait=wait)):
+                self.data.update({
+                    'transaction': transaction})
+                self.save()
+                return transaction
+            return None
+        return self.payment
 
     def request(self, polling: bool = False) -> bool:
         """Request Payment or Refund"""
@@ -71,7 +115,7 @@ class Transaction(models.Model):
             if self.type == self.Type.REFUND:
                 location = self.api.create(type='refund',
                     polling=polling,
-                    parent_id=self.parent.id)
+                    parent_id=self.parent.key)
             else:
                 location = self.api.create(type='payment',
                     mobile=PhoneValidator.clean_number(self.mobile),

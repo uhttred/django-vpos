@@ -3,12 +3,14 @@ from vpos.exceptions import VposConfigurationError as Err
 
 
 DEFAULTS: dict = {
+    # required
     'MODE': 'production',
+    'POS_ID': None,
     'TOKEN': '',
     'URL': '',
-    'POS_ID': None,
     'VPOS_BASE_URL': 'https://vpos.ao/api/v1',
     'VPOS_SUPERVISOR_CARD': '',
+    # optionals
     'VPOS_TEST_SUPERVISOR_CARD': '9610123456123412341234123456789012345'}
 
 
@@ -44,6 +46,11 @@ class VposSettings:
         if not self.POS_ID:
             raise Err('POS_ID is required')
 
+    def get_supervisor_card(self) -> str:
+        if self.MODE == 'sandbox':
+            return self.VPOS_TEST_SUPERVISOR_CARD
+        return self.VPOS_SUPERVISOR_CARD
+
     def __getattr__(self, attr: str):
         if attr not in self.__defaults:
             raise AttributeError("Invalid VPOS setting: '%s'" % attr)
@@ -54,10 +61,5 @@ class VposSettings:
         setattr(self, attr, value)
         return value
     
-    @property
-    def supervisor_card(self) -> str:
-        if self.mode == 'sandbox':
-            return self.VPOS_TEST_SUPERVISOR_CARD
-        return self.VPOS_SUPERVISOR_CARD
 
 conf = VposSettings()
