@@ -35,7 +35,7 @@ class VposAPI:
             return r.headers.get('location')
         return None
 
-    def check(self, request_id: str, wait: bool = True) -> Union[dict, None]:
+    def check(self, request_id: str, wait: bool = False) -> Union[dict, None]:
         """
         Check Transaction Queued/Running Status
         Returns True if already completd else retuns False

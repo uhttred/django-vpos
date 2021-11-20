@@ -6,6 +6,7 @@ from django.utils.translation import gettext_lazy as _
 
 from vpos.configs import conf
 from vpos.validators import PhoneValidator
+from vpos.signals import transaction_completed
 from vpos.api import VposAPI
 
 
@@ -86,6 +87,13 @@ class Transaction(models.Model):
         return self.data.get('transaction')
     
     @property
+    def status(self) -> Union[str, None]:
+        """Transaction Status from vPOS (accepted or rejected)"""
+        if (payment := self.payment):
+            return payment.get('status')
+        return None
+    
+    @property
     def idempotency_key(self) -> str:
         return str(self.id)
     
@@ -94,17 +102,24 @@ class Transaction(models.Model):
         """location string provided by vPOS api header"""
         return self.data.get('location', '')
     
+    def confirm(self, transaction_data: dict) -> bool:
+        """Confirms transaction"""
+        if not self.payment:
+            self.__set_transaction_data(
+                data=transaction_data)
+            return True
+        return False
+    
     def check_payment(self, wait: bool = False) -> Union[dict, None]:
         """
-        Check transaction status from vPOS API,
+        Checks transaction status from vPOS API,
         return transaction data if transaction accepted/rejected
-        else (if waiting) returns None
+        else returns None
         """
         if not self.payment:
             if (transaction := self.api.check(self.key, wait=wait)):
-                self.data.update({
-                    'transaction': transaction})
-                self.save()
+                self.__set_transaction_data(
+                    data=transaction)
                 return transaction
             return None
         return self.payment
@@ -130,4 +145,16 @@ class Transaction(models.Model):
         if not self.key:
             self.key = location.split('/')[-1]
             self.data.update({'location': location})
+            self.requested = True
             self.save()
+    
+    def __set_transaction_data(self, data: dict) -> None:
+        if not self.payment:
+            self.data.update({'transaction': data})
+            self.save()
+            self.__dispatch_transaction_completed()
+    
+    def __dispatch_transaction_completed(self):
+        transaction_completed.send(
+            self.__class__,
+            transaction=self)

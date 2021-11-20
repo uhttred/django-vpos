@@ -4,12 +4,12 @@ from vpos.exceptions import VposConfigurationError as Err
 
 DEFAULTS: dict = {
     # required
-    'MODE': 'production',
     'POS_ID': None,
-    'TOKEN': '',
-    'URL': '',
+    'TOKEN': None,
+    'URL': None,
+    'MODE': 'production',
+    'VPOS_SUPERVISOR_CARD': None,
     'VPOS_BASE_URL': 'https://vpos.ao/api/v1',
-    'VPOS_SUPERVISOR_CARD': '',
     # optionals
     'VPOS_TEST_SUPERVISOR_CARD': '9610123456123412341234123456789012345'}
 
@@ -41,6 +41,22 @@ class VposSettings:
             raise Err(
                 "Invalid MODE: '%s'. Must be " 
                 "production or sandbox" % self.MODE)
+    
+    def validate_token(self):
+        if not self.POS_ID:
+            raise Err('TOKEN is required')
+    
+    def validate_url(self):
+        if not self.POS_ID:
+            raise Err('URL is required for callback transaction confirmation')
+    
+    def validate_vpos_base_url(self):
+        if not self.POS_ID:
+            raise Err('VPOS_BASE_URL is required')
+    
+    def validate_vpos_supervisor_card(self):
+        if not self.POS_ID:
+            raise Err('VPOS_SUPERVISOR_CARD is required')
     
     def validate_pos_id(self):
         if not self.POS_ID:
