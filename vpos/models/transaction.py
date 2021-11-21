@@ -71,7 +71,8 @@ class Transaction(models.Model):
         related_name='refund',
         blank=True,
         null=True,
-        default=None)
+        default=None,
+        editable=False)
     
     created_at = models.DateTimeField(_('created at'), auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(_('updated at'), auto_now=True)
@@ -93,6 +94,22 @@ class Transaction(models.Model):
             return payment.get('status')
         return None
     
+    @property
+    def accepted(self) -> bool:
+        return self.status == 'accepted'
+    
+    @property
+    def rejected(self) -> bool:
+        return self.status == 'rejected'
+    
+    @property
+    def is_payment(self) -> bool:
+        return self.type == self.Type.PAYMENT
+    
+    @property
+    def is_refund(self) -> bool:
+        return self.type == self.Type.REFUND
+
     @property
     def idempotency_key(self) -> str:
         return str(self.id)
@@ -158,3 +175,6 @@ class Transaction(models.Model):
         transaction_completed.send(
             self.__class__,
             transaction=self)
+    
+    def __str__(self) -> str:
+        return f'{self.type.title()} Transaction'
