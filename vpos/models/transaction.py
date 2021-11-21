@@ -4,7 +4,9 @@ from typing import Union
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
-from vpos.configs import conf
+from vpos.configs import (
+    VPOS_STATUS_REASON,
+    conf)
 from vpos.validators import PhoneValidator
 from vpos.signals import transaction_completed
 from vpos.api import VposAPI
@@ -55,7 +57,7 @@ class Transaction(models.Model):
     id = models.UUIDField(_('id'),
         primary_key=True, default=uuid.uuid4, editable=False)
     key = models.CharField(_('location id'),
-        max_length=25, null=True, default=None, editable=False)
+        max_length=100, null=True, default=None, editable=False)
     amount = models.DecimalField(_('amount'),
         max_digits=12, decimal_places=2, editable=False)
     mobile = models.CharField(_('mobile number'),
@@ -92,6 +94,20 @@ class Transaction(models.Model):
         """Transaction Status from vPOS (accepted or rejected)"""
         if (payment := self.payment):
             return payment.get('status')
+        return None
+    
+    @property
+    def status_code(self) -> Union[int, None]:
+        """vPOS Transaction Status Reason Code"""
+        if (payment := self.payment):
+            return payment.get('status_reason')
+        return None
+    
+    @property
+    def status_reason(self) -> Union[str, None]:
+        """vPOS Transaction Status Reason Text"""
+        if (code := self.status_code):
+            return VPOS_STATUS_REASON.get(str(code))
         return None
     
     @property
@@ -145,11 +161,13 @@ class Transaction(models.Model):
         """Request Payment or Refund"""
         if not self.requested:
             if self.type == self.Type.REFUND:
-                location = self.api.create(type='refund',
+                location = self.api.create(
+                    type=str(self.Type.REFUND),
                     polling=polling,
                     parent_id=self.parent.key)
             else:
-                location = self.api.create(type='payment',
+                location = self.api.create(
+                    type=str(self.Type.PAYMENT),
                     mobile=PhoneValidator.clean_number(self.mobile),
                     amount=str(self.amount),
                     polling=polling)
@@ -176,5 +194,3 @@ class Transaction(models.Model):
             self.__class__,
             transaction=self)
     
-    def __str__(self) -> str:
-        return f'{self.type.title()} Transaction'

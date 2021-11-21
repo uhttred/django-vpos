@@ -1,4 +1,6 @@
 from django.conf import settings
+from django.utils.translation import gettext_lazy as _
+
 from vpos.exceptions import VposConfigurationError as Err
 
 
@@ -12,6 +14,28 @@ DEFAULTS: dict = {
     'VPOS_BASE_URL': 'https://vpos.ao/api/v1',
     # optionals
     'VPOS_TEST_SUPERVISOR_CARD': '9610123456123412341234123456789012345'}
+
+
+VPOS_STATUS_REASON: dict = {
+    # client
+    '3000': _('Refused by client'),
+    # Processor
+    '2010': _('Request was refused by the processor'),
+    '2009': _('Parent transaction is too old to be refunded'),
+    '2008': _('Invalid merchant email'),
+    '2007': _('Invalid or Inactive supervisor card'),
+    '2006': _('Insufficient funds in POS available for refund'),
+    '2005': _('POS is closed and unable to accept transactions'),
+    '2004': _('Request timed-out and was refused by the processor'),
+    '2003': _('Card or network daily limit exceeded'),
+    '2002': _('Refused by the card issuer'),
+    '2001': _("Insufficient funds in client's account"),
+    '2000': _('Generic processor error'),
+    # Gateway
+    '1003': _('Parent transaction ID of refund request is not an accepted Payment'),
+    '1002': _('Gateway is not authorized to execute transactions on the specified POS'),
+    '1001': _('Request timed-out and will not be processed'),
+    '1000': _('Generic gateway error')}
 
 
 class VposSettings:
