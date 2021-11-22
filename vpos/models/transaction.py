@@ -3,6 +3,7 @@ from typing import Union
 
 from django.db import models
 from django.utils.translation import gettext_lazy as _
+from django.core.exceptions import ValidationError
 
 from vpos.configs import (
     VPOS_STATUS_REASON,
@@ -28,6 +29,9 @@ class Manager(models.Manager):
             amount=parent.amount)
         if conf.MODE == 'production':
             transaction.full_clean()
+            if parent.rejected or parent.is_refund:
+                raise ValidationError(
+                    _("'parent' must be an accepted payment transaction"))
         transaction.save()
         return transaction
     
@@ -48,7 +52,7 @@ class Transaction(models.Model):
 
     class Meta:
         verbose_name = _('Transaction')
-        verbose_name_plural = _('Transaction')
+        verbose_name_plural = _('Transactions')
     
     Type = TransactionType
     objects = Manager()
@@ -134,7 +138,7 @@ class Transaction(models.Model):
     def location(self) -> str:
         """location string provided by vPOS api header"""
         return self.data.get('location', '')
-    
+
     def confirm(self, transaction_data: dict) -> bool:
         """Confirms transaction"""
         if not self.payment:
