@@ -10,9 +10,14 @@ DEFAULTS: dict = {
     'TOKEN': None,
     'URL': None,
     'MODE': 'production',
+    # optionals
+    # fees expect a tuple in this order (percent, min amount, max amount, plus amount)
+    # ex: (0.7, None, 5000, 0)
+    # ex: (15.3, 500.54, None, 68)
+    'BANK_FEE': None,
+    'VPOS_FEE': None,
     'VPOS_SUPERVISOR_CARD': None,
     'VPOS_BASE_URL': 'https://vpos.ao/api/v1',
-    # optionals
     'VPOS_TEST_SUPERVISOR_CARD': '9610123456123412341234123456789012345'}
 
 
@@ -81,6 +86,14 @@ class VposSettings:
     def validate_vpos_supervisor_card(self):
         if not self.POS_ID:
             raise Err('VPOS_SUPERVISOR_CARD is required')
+    
+    def validate_vpos_fee(self):
+        if self.VPOS_FEE != None and not isinstance(self.VPOS_FEE, tuple):
+            raise Err('VPOS_FEE if set, must be a tuple in this order: (percent, min amount, max amount, puls amount)')
+    
+    def validate_bank_fee(self):
+        if self.BANK_FEE != None and not isinstance(self.BANK_FEE, tuple):
+            raise Err('BANK_FEE if set, must be a tuple in this order: (percent, min amount, max amount, puls amount)')
     
     def validate_pos_id(self):
         if not self.POS_ID:

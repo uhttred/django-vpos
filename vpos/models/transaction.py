@@ -1,16 +1,18 @@
 import uuid
+import decimal
 from typing import Union
 
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 from django.core.exceptions import ValidationError
 
-from vpos.configs import (
-    VPOS_STATUS_REASON,
-    conf)
+from vpos.utils import get_calculated_fees
 from vpos.validators import PhoneValidator
 from vpos.signals import transaction_completed
 from vpos.api import VposAPI
+from vpos.configs import (
+    VPOS_STATUS_REASON,
+    conf)
 
 
 class TransactionType(models.TextChoices):
@@ -37,13 +39,27 @@ class Manager(models.Manager):
     
     def create_payment(self, mobile: str, amount: str):
         """Creates a new Refund Transaction"""
+        
+        data: dict = {}
+
         transaction = self.model(
             type=TransactionType.PAYMENT,
             mobile=mobile,
             amount=amount,
             parent=None)
+        
+        if conf.VPOS_FEE:
+            data['vpos_fee'] = get_calculated_fees(
+                float(transaction.amount), conf.VPOS_FEE, name='vpos fee')
+        
+        if conf.BANK_FEE:
+            data['bank_fee'] = get_calculated_fees(
+                float(transaction.amount), conf.BANK_FEE, name='bank fee')
+
         if conf.MODE == 'production':
             transaction.full_clean()
+
+        transaction.data = data
         transaction.save()
         return transaction
 
@@ -69,7 +85,7 @@ class Transaction(models.Model):
     type = models.CharField(_('type'),
         max_length=7, choices=Type.choices, editable=False)
     requested = models.BooleanField(_('was requested'), default=False, editable=False)
-    data = models.JSONField(_('vpos transaction data'), default=dict, editable=False)
+    data = models.JSONField(_('additional data'), default=dict, editable=False)
     parent = models.OneToOneField(
         'self',
         on_delete=models.CASCADE,
@@ -87,6 +103,40 @@ class Transaction(models.Model):
         super().__init__(*args, **kwargs)
         self.api = VposAPI(
             idempotency_key=self.idempotency_key)
+
+    # -------------------------------------------------------------------------------------------
+    # fees
+
+    @property
+    def bank_fee_data(self):
+        return self.data.get('bank_fee', {})
+    
+    @property
+    def vpos_fee_data(self):
+        return self.data.get('vpos_fee', {})
+    
+    @property
+    def vpos_fee(self):
+        if (fee := self.data.get('vpos_fee')):
+            return fee.get('expense', 0)
+        return 0
+    
+    @property
+    def bank_fee(self):
+        if (fee := self.data.get('bank_fee')):
+            return fee.get('expense', 0)
+        return 0
+    
+    @property
+    def fees_expense(self):
+        return decimal.Decimal('%.2f' % (self.vpos_fee + self.bank_fee))
+    
+    @property
+    def net_amount(self):
+        return self.amount - self.fees_expense
+
+    # -------------------------------------------------------------------------------------------
+    # payment
 
     @property
     def payment(self) -> Union[dict, None]:
